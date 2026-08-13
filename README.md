@@ -1,135 +1,120 @@
 # Athens Stock Exchange Price Forecasting with RNN and GRU
 
-A deep learning project for **multi-step stock price forecasting** using historical data from the Athens Stock Exchange (ASE).
+Multi-step stock price forecasting on Athens Stock Exchange data: given 5 trading days of history, predict the closing price for the next 5 trading days.
 
-The system uses **5 trading days of historical data** to predict closing prices for the following **5 trading days**, comparing a Vanilla Recurrent Neural Network (RNN) with a Gated Recurrent Unit (GRU) architecture.
+Two recurrent architectures are compared — a Vanilla RNN that forecasts autoregressively and a GRU that predicts all five days at once — to explore how the forecasting strategy affects multi-step predictions.
 
----
-
-## Project Overview
-
-This project implements an end-to-end time-series forecasting pipeline for stock price prediction.
-
-Two recurrent neural network architectures are implemented and compared:
-
-- **Vanilla RNN** — an autoregressive recurrent model used as the baseline.
-- **GRU (Gated Recurrent Unit)** — a deeper recurrent architecture designed to capture temporal dependencies more effectively.
-
-The pipeline includes data preprocessing, feature scaling, day-of-week encoding, stock-specific sliding-window sequence generation, model training with early stopping, and evaluation on unseen test data.
+MSc coursework project.
 
 ---
 
-## Forecasting Task
+## The Two Approaches
 
-The forecasting problem is formulated as:
+The models differ mainly in how they produce the 5-day forecast.
 
-**5 historical trading days → 5 future closing prices**
+### Vanilla RNN — Autoregressive
 
-Sliding-window sequences are generated independently for each stock to ensure that sequences never cross stock boundaries.
+The Vanilla RNN uses 64 hidden units with ReLU activation. It processes the 5-day input window and then predicts one day at a time.
 
-The target variable is:
+After each prediction, the predicted closing price is written back into the `Close` position of the input before predicting the next day.
 
-`Close`
+This allows each forecast step to depend on the previous prediction, but it also means that errors made early in the forecast can propagate to later days.
 
----
+### GRU — Direct Multi-Output
 
-## Data Preprocessing
+The GRU uses two recurrent layers with 128 hidden units and dropout of 0.2.
 
-The preprocessing pipeline includes:
+Instead of predicting recursively, the final hidden state is mapped directly to the five future closing prices through a linear layer.
 
-### Stock-wise Sequence Generation
+This avoids feeding predictions back into the network and therefore avoids direct error propagation between forecast steps.
 
-Each CSV file represents an individual stock and receives a unique `Stock_ID`.
-
-Sliding windows are then generated separately for each stock, preventing sequences from combining observations belonging to different securities.
-
-### Day-of-Week Encoding
-
-The trading date is converted into a categorical day-of-week feature and represented using one-hot encoding.
-
-This provides the models with additional temporal information associated with the trading calendar.
-
-### Feature Scaling
-
-Numerical features are normalized using `MinMaxScaler`.
-
-The scaler is fitted exclusively on the training data and subsequently applied to the validation and test sets.
-
-A dedicated scaler is also maintained for the `Close` target variable so predictions can be transformed back to their original scale during evaluation.
+Both models use MSE loss, the Adam optimizer, and early stopping based on validation loss with `patience=10`. The best model weights are restored before evaluation.
 
 ---
 
-## Models
+## Data Handling
 
-### Vanilla RNN
+Each CSV file represents one stock and is assigned a `Stock_ID` when loaded.
 
-The baseline model uses a recurrent neural network with:
+### Sequences are created separately for each stock
 
-- 64 hidden units
-- ReLU activation
-- autoregressive multi-step prediction
-- Adam optimizer
-- MSE loss
+Sliding windows are generated independently for every `Stock_ID` after sorting observations by date.
 
-The model processes the historical 5-day sequence and predicts future closing prices recursively, feeding each predicted value back into the model when generating the next forecast.
+This prevents sequences from accidentally crossing from one stock into another when the individual CSV files are combined into a single DataFrame.
 
-### GRU
+### Scaling
 
-The second architecture uses a two-layer GRU network with:
+`MinMaxScaler` is fitted only on the training data and then applied to the validation and test sets.
 
-- 128 hidden units
-- 2 recurrent layers
-- dropout of 0.2
-- direct 5-day output
-- Adam optimizer
-- MSE loss
+A separate scaler is fitted to the `Close` column so that model predictions can be converted back to their original price scale before evaluation.
 
-Unlike the autoregressive RNN, the GRU generates all five future predictions directly from the final hidden representation.
+### Day-of-week feature
+
+The trading date is converted into a day-of-week feature and one-hot encoded before training.
+
+Each model receives:
+
+- **Input:** 5 trading days
+- **Output:** next 5 closing prices
 
 ---
 
-## Training
+## Evaluation
 
-Both models are trained using **Mean Squared Error (MSE)** as the loss function and the **Adam optimizer**.
+The models are evaluated on the held-out test set using:
 
-Early stopping monitors validation loss with a patience of **10 epochs**. The best-performing model weights are stored during training and restored before evaluation.
+- Mean Absolute Error (MAE)
+- Root Mean Squared Error (RMSE)
+- Mean Absolute Percentage Error (MAPE)
 
-Default maximum training duration:
+Metrics are calculated after converting the predictions back to the original price scale.
 
-`100 epochs`
-
----
-
-## Evaluation Metrics
-
-Performance on the unseen test set is evaluated using:
-
-- **MAE (Mean Absolute Error)** — average absolute difference between predicted and actual prices.
-- **RMSE (Root Mean Squared Error)** — gives greater weight to larger forecasting errors.
-- **MAPE (Mean Absolute Percentage Error)** — expresses prediction error relative to the true stock price.
-
-Predictions are converted back to the original price scale before calculating these metrics.
+The implementation prints the evaluation results directly to the terminal after training.
 
 ---
 
-## Project Structure
+## Running the Project
 
-```text
-stock-price-forecasting-rnn-gru/
-│
-├── main.py
-├── README.md
-├── .gitignore
-└── LICENSE
+Install the required dependencies:
+
+```bash
+pip install -r requirements.txt
 ```
 
-The stock market dataset is not included in the repository.
+Run both models:
 
-The expected data directory has the following structure:
+```bash
+python main.py --data_dir ./Time_series_data --model both --epochs 100
+```
+
+Run only the Vanilla RNN:
+
+```bash
+python main.py --data_dir ./Time_series_data --model rnn
+```
+
+Run only the GRU:
+
+```bash
+python main.py --data_dir ./Time_series_data --model gru
+```
+
+### Command-Line Arguments
+
+| Argument | Description | Default |
+|---|---|---|
+| `--data_dir` | Root folder containing `train/`, `validation/`, and `test/` | required |
+| `--model` | Model to train: `rnn`, `gru`, or `both` | `both` |
+| `--epochs` | Maximum number of training epochs | `100` |
+
+---
+
+## Expected Data Layout
+
+The dataset is not included in this repository.
 
 ```text
 Time_series_data/
-│
 ├── train/
 │   └── *.csv
 ├── validation/
@@ -138,68 +123,82 @@ Time_series_data/
     └── *.csv
 ```
 
----
+Each CSV must contain at least:
 
-## How to Run
+- `Date`
+- `Close`
 
-The program provides a command-line interface using Python's `argparse`.
-
-### Arguments
-
-- `--data_dir` — path to the directory containing the training, validation, and test folders (**required**)
-- `--model` — model to train: `rnn`, `gru`, or `both` (default: `both`)
-- `--epochs` — maximum number of training epochs (default: `100`)
-
-### Run Both Models
-
-```bash
-python main.py --data_dir ./Time_series_data --model both --epochs 100
-```
-
-### Run Only the Vanilla RNN
-
-```bash
-python main.py --data_dir ./Time_series_data --model rnn --epochs 100
-```
-
-### Run Only the GRU
-
-```bash
-python main.py --data_dir ./Time_series_data --model gru --epochs 100
-```
+The remaining numeric columns are used as input features.
 
 ---
 
-## Technologies
+## Limitations
+
+### Full-batch training
+
+Training is currently performed without mini-batching. Each epoch therefore performs one optimizer update over the complete training set.
+
+Introducing mini-batches would be one of the first improvements to the current implementation.
+
+### Scaling across different stocks
+
+The `MinMaxScaler` is fitted on the training data. Stocks in the test set whose prices fall outside the range observed during training may therefore produce scaled values outside the range seen by the models.
+
+Per-stock normalization or forecasting returns instead of absolute prices could be explored as alternatives.
+
+### Autoregressive feature updates
+
+During autoregressive forecasting, only the predicted `Close` value is updated between forecast steps.
+
+The remaining features stay fixed at their last observed values, which is a simplification of the real forecasting problem.
+
+### Reproducibility
+
+No fixed random seed is currently used, so model initialization and results can vary slightly between runs.
+
+### One-hot encoding
+
+Day-of-week encoding is performed separately for each split. If one split does not contain a particular weekday, the resulting feature columns may not align.
+
+### Naive forecasting baseline
+
+Stock prices can behave similarly to a random walk over short horizons. A useful extension would therefore be to compare both neural models against a naive baseline that predicts future prices from the most recently observed closing price.
+
+---
+
+## Tech Stack
 
 - Python
 - PyTorch
 - pandas
 - NumPy
 - scikit-learn
+- Matplotlib
+- seaborn
 
 ---
 
-## Key Implementation Features
+## Repository Structure
 
-- Multi-step **5-day stock price forecasting**
-- Independent sequence generation for each stock
-- Training-only fitting of feature scalers
-- Day-of-week feature engineering
-- Autoregressive Vanilla RNN forecasting
-- Direct multi-output GRU forecasting
-- Early stopping based on validation loss
-- Evaluation on unseen stocks using MAE, RMSE, and MAPE
-- Command-line interface for model selection and training configuration
+```text
+stock-price-forecasting-rnn-gru/
+├── main.py
+├── requirements.txt
+├── README.md
+├── .gitignore
+└── LICENSE
+```
 
 ---
 
-## Author
+## Authors
 
 **Anna Allagioti**  
 **Maria Karkoglou**
 
----
+## License
+
+MIT
 
 ## License
 
