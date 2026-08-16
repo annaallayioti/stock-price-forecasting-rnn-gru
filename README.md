@@ -196,9 +196,6 @@ stock-price-forecasting-rnn-gru/
 **Anna Allagioti**  
 **Maria Karkoglou**
 
-## License
-
-MIT
 
 ## License
 
